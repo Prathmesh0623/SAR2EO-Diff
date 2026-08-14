@@ -1,0 +1,41 @@
+# Config for Pix2Pix baseline (Stage 7)
+experiment_name: "pix2pix_baseline_v1"
+model: "pix2pix"
+
+data:
+  dataset_root: "/kaggle/input/sen12ms"
+  sar_channels: ["VV", "VH"]
+  eo_channels: ["R", "G", "B"]
+  patch_size: 128
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  seed: 42
+
+model_params:
+  in_channels: 2
+  out_channels: 3
+  generator_base_channels: 64
+  discriminator_base_channels: 64
+  lambda_l1: 100.0
+
+training:
+  batch_size: 8
+  learning_rate: 0.0002
+  beta1: 0.5
+  beta2: 0.999
+  optimizer: "adam"
+  epochs: 30
+  mixed_precision: true
+  grad_accum_steps: 1
+  num_workers: 2
+  checkpoint_dir: "checkpoints/pix2pix"
+  save_every_n_epochs: 1
+  resume_from: null
+
+logging:
+  use_wandb: true
+  project: "sar2eo-diff"
+  run_name: "pix2pix-baseline"
+
+seed: 42

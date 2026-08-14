@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Environments
+venv/
+.venv/
+env/
+
+# Data & large artifacts (never commit these)
+data/
+datasets/
+*.tif
+*.tiff
+*.h5
+*.hdf5
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/**/*.ckpt
+wandb/
+mlruns/
+
+# Results that are large binary outputs (keep small figures only if desired)
+results/qualitative/*.png
+results/qualitative/*.jpg
+
+# OS / editor
+.DS_Store
+.vscode/
+*.swp
+
+# Keep folder structure
+!checkpoints/.gitkeep
+!results/figures/.gitkeep
+!results/tables/.gitkeep
+!results/qualitative/.gitkeep

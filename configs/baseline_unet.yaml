@@ -1,0 +1,39 @@
+# Config for the U-Net baseline (Stage 6)
+experiment_name: "unet_baseline_v1"
+model: "unet"
+
+data:
+  dataset_root: "/kaggle/input/sen12ms"   # update to your Kaggle dataset path
+  sar_channels: ["VV", "VH"]              # 2-channel SAR input
+  eo_channels: ["R", "G", "B"]            # 3-channel EO output (RGB first)
+  patch_size: 128                          # 128 to start; raise to 256 if GPU allows
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  seed: 42
+
+model_params:
+  in_channels: 2
+  out_channels: 3
+  base_channels: 64
+  depth: 4
+
+training:
+  batch_size: 8
+  learning_rate: 0.0001
+  optimizer: "adam"
+  epochs: 20
+  loss: "l1"
+  mixed_precision: true
+  grad_accum_steps: 1
+  num_workers: 2
+  checkpoint_dir: "checkpoints/unet"
+  save_every_n_epochs: 1
+  resume_from: null
+
+logging:
+  use_wandb: true
+  project: "sar2eo-diff"
+  run_name: "unet-baseline"
+
+seed: 42

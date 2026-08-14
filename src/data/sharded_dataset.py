@@ -34,9 +34,10 @@ from typing import Optional, Callable
 import torch
 from torch.utils.data import Dataset
 
-# Empirically observed on shard_000.pt -- see docstring above.
-SAR_MIN, SAR_MAX = -81.0, 1522.0
-OPT_MIN, OPT_MAX = 136.0, 22304.0
+# Empirically observed across shards 000-012 (shard_013 is corrupted/unreadable,
+# excluded from this scan -- see the __init__ skip-logic below).
+SAR_MIN, SAR_MAX = -82.0, 2200.0
+OPT_MIN, OPT_MAX = 0.0, 28000.0
 
 
 def _normalize(x: torch.Tensor, lo: float, hi: float) -> torch.Tensor:

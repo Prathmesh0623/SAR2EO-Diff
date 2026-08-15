@@ -91,15 +91,22 @@ generalization check → final full run.
 
 ## Results
 
-`[TODO — final comparison table, populated from
-results/tables/final_comparison.csv once real experiments are complete]`
+> **Scope note:** these are results from an initial, time-constrained run
+> (small subsets, few epochs, free-tier Kaggle T4 GPU) intended to prove
+> the full pipeline works end-to-end on real data — not a final,
+> fully-trained result. Full details, failure analysis, and next steps
+> are in [`docs/results_today.md`](docs/results_today.md).
 
 | Model | PSNR | SSIM | LPIPS | FID | mIoU |
 |-------|------|------|-------|-----|------|
-| U-Net | — | — | — | — | — |
-| Pix2Pix | — | — | — | — | — |
-| Conditional Diffusion | — | — | — | — | — |
-| Diffusion + Semantic Consistency | — | — | — | — | — |
+| U-Net | 19.608 | 0.881 | 0.392 | — | — |
+| Pix2Pix | **25.618** | 0.878 | **0.289** | — | — |
+| Conditional Diffusion | not evaluated (undertrained — see notes) | — | — | — | — |
+| Diffusion + Semantic Consistency | not run (future work) | — | — | — | — |
+
+Pix2Pix outperformed the U-Net baseline on PSNR and LPIPS despite a
+discriminator-collapse issue observed during its training — see
+`docs/results_today.md` for the full failure analysis.
 
 ## Ablation Study
 
@@ -201,12 +208,16 @@ and downstream-task evaluation. Full list in `docs/research_report.md` §19.
 - [x] Repository structure, configs, and all source modules created
 - [x] Unit tests passing for data preprocessing, all four model
       architectures (shape/forward-pass), and evaluation metrics
-- [ ] Dataset pipeline validated against real SEN12MS on Kaggle
-- [ ] U-Net baseline trained
-- [ ] Pix2Pix baseline trained
-- [ ] Conditional diffusion trained
-- [ ] Semantic consistency experiment run
-- [ ] Full evaluation + ablations + failure analysis + final report completed
+- [x] Dataset pipeline validated against real data (SEN12MS-Asia, Kaggle)
+- [x] U-Net baseline trained + formally evaluated (PSNR/SSIM/LPIPS)
+- [x] Pix2Pix baseline trained + formally evaluated (PSNR/SSIM/LPIPS)
+- [x] Conditional diffusion trained (undertrained; sampling not yet
+      producing valid-range output — see `docs/results_today.md`)
+- [ ] Semantic consistency experiment run (future work)
+- [ ] Full-scale training (more epochs, full ~26k-sample dataset)
+- [ ] FID and mIoU metrics, formal held-out test-set evaluation
+- [ ] Final polished research report (`docs/research_report.md` still a
+      template; `docs/results_today.md` has real interim findings)
 
 ## References
 

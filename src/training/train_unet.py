@@ -40,14 +40,14 @@ def main(config_path: str):
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
-        
+        subset_size=1000,
     )
     val_ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split="val",
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
-        
+        subset_size=1000,
     )
 
     train_sampler = ShardAwareSampler(train_ds, seed=cfg["seed"])

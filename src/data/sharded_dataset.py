@@ -197,3 +197,33 @@ if __name__ == "__main__":
         print(f"\nGLOBAL: sar[{sar_min:.1f},{sar_max:.1f}] opt[{opt_min:.1f},{opt_max:.1f}]")
         print("Compare against SAR_MIN/MAX and OPT_MIN/MAX constants in this file "
               "and update them if these global values differ.")
+    class ShardAwareSampler(torch.utils.data.Sampler):
+   
+
+        def __init__(self, dataset: "ShardedSEN12MSDataset", seed: int = 42):
+            self.dataset = dataset
+            self.seed = seed
+            self.epoch = 0
+
+        def set_epoch(self, epoch: int):
+            self.epoch = epoch
+
+        def __iter__(self):
+            # Group this dataset's (already split-filtered) indices by shard.
+            groups: dict[int, list[int]] = {}
+            for pos, global_idx in enumerate(self.dataset._global_indices):
+                shard_idx, _ = self.dataset._locate(global_idx)
+                groups.setdefault(shard_idx, []).append(pos)
+
+            g = torch.Generator().manual_seed(self.seed + self.epoch)
+            shard_order = torch.randperm(len(groups), generator=g).tolist()
+
+            order = []
+            for shard_idx in shard_order:
+                positions = groups[shard_idx]
+                perm = torch.randperm(len(positions), generator=g).tolist()
+                order.extend(positions[i] for i in perm)
+            return iter(order)
+
+        def __len__(self):
+            return len(self.dataset)

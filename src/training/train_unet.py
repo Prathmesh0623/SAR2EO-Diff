@@ -18,7 +18,7 @@ import yaml
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.sharded_dataset import ShardedSEN12MSDataset
+from src.data.sharded_dataset import ShardedSEN12MSDataset, ShardAwareSampler
 from src.data.transforms import PairedAugment
 from src.models.unet import UNet
 from src.utils.seed import set_seed, log_environment
@@ -40,18 +40,19 @@ def main(config_path: str):
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
-        subset_size=200,   # smoke-test cap -- remove this line for a full run later
+        
     )
     val_ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split="val",
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
-        subset_size=200,   # smoke-test cap -- remove this line for a full run later
+        
     )
 
+    train_sampler = ShardAwareSampler(train_ds, seed=cfg["seed"])
     train_loader = DataLoader(train_ds, batch_size=cfg["training"]["batch_size"],
-                               shuffle=True, num_workers=cfg["training"]["num_workers"])
+                               sampler=train_sampler, num_workers=cfg["training"]["num_workers"])
     val_loader = DataLoader(val_ds, batch_size=cfg["training"]["batch_size"],
                              shuffle=False, num_workers=cfg["training"]["num_workers"])
 

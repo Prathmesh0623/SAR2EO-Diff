@@ -20,7 +20,7 @@ training:
   batch_size: 4              # start conservative -- 256x256 uses more memory than 128 would
   learning_rate: 0.0001
   optimizer: "adam"
-  epochs: 2                    # smoke test only -- bump this up later for a real run
+  epochs: 20                    # smoke test only -- bump this up later for a real run
   loss: "l1"
   mixed_precision: true
   grad_accum_steps: 1

@@ -4,16 +4,30 @@ model: "unet"
 
 data:
   dataset_root: "/kaggle/input/datasets/krishnaanchal/sen12ms-asia/asian_sen12ms_shards"
-  patch_size: 256          # was 128 -- this dataset's patches are already 256x256, no cropping needed
-  # (remove or ignore sar_channels / eo_channels -- ShardedSEN12MSDataset doesn't use them,
-  #  it always returns the 3-channel sar/opt tensors as stored)
+  patch_size: 256          # this dataset's patches are already 256x256, no cropping needed
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  seed: 42
 
 model_params:
-  in_channels: 3            # was 2 -- this dataset's SAR has 3 channels, not VV/VH only
+  in_channels: 3            # this dataset's SAR has 3 channels, not VV/VH only
+  out_channels: 3
+  base_channels: 64
+  depth: 4
 
 training:
-  batch_size: 4              # start conservative -- 256x256 uses more memory than the 128 I assumed
+  batch_size: 4              # start conservative -- 256x256 uses more memory than 128 would
+  learning_rate: 0.0001
+  optimizer: "adam"
   epochs: 2                    # smoke test only -- bump this up later for a real run
+  loss: "l1"
+  mixed_precision: true
+  grad_accum_steps: 1
+  num_workers: 2
+  checkpoint_dir: "checkpoints/unet"
+  save_every_n_epochs: 1
+  resume_from: null
 
 logging:
   use_wandb: true

@@ -34,10 +34,9 @@ from typing import Optional, Callable
 import torch
 from torch.utils.data import Dataset
 
-# Empirically observed across shards 000-012 (shard_013 is corrupted/unreadable,
-# excluded from this scan -- see the __init__ skip-logic below).
-SAR_MIN, SAR_MAX = -82.0, 2200.0
-OPT_MIN, OPT_MAX = 0.0, 28000.0
+# Empirically observed on shard_000.pt -- see docstring above.
+SAR_MIN, SAR_MAX = -81.0, 1522.0
+OPT_MIN, OPT_MAX = 136.0, 22304.0
 
 
 def _normalize(x: torch.Tensor, lo: float, hi: float) -> torch.Tensor:
@@ -88,16 +87,9 @@ class ShardedSEN12MSDataset(Dataset):
         self._shard_paths = []
         self._shard_lengths = []
         for p in shard_paths:
-            try:
-                n = torch.load(p, map_location="cpu")["sar"].shape[0]
-            except Exception as e:
-                print(f"[ShardedSEN12MSDataset] Skipping unreadable shard {p.name}: {e}")
-                continue
+            n = torch.load(p, map_location="cpu")["sar"].shape[0]
             self._shard_paths.append(p)
             self._shard_lengths.append(n)
-
-        if not self._shard_paths:
-            raise RuntimeError("No readable shards found -- all shard files failed to load.")
 
         total = sum(self._shard_lengths)
         all_indices = list(range(total))
@@ -197,33 +189,48 @@ if __name__ == "__main__":
         print(f"\nGLOBAL: sar[{sar_min:.1f},{sar_max:.1f}] opt[{opt_min:.1f},{opt_max:.1f}]")
         print("Compare against SAR_MIN/MAX and OPT_MIN/MAX constants in this file "
               "and update them if these global values differ.")
-    class ShardAwareSampler(torch.utils.data.Sampler):
-   
 
-        def __init__(self, dataset: "ShardedSEN12MSDataset", seed: int = 42):
-            self.dataset = dataset
-            self.seed = seed
-            self.epoch = 0
 
-        def set_epoch(self, epoch: int):
-            self.epoch = epoch
+class ShardAwareSampler(torch.utils.data.Sampler):
+    """A sampler that avoids constant shard-swapping.
 
-        def __iter__(self):
-            # Group this dataset's (already split-filtered) indices by shard.
-            groups: dict[int, list[int]] = {}
-            for pos, global_idx in enumerate(self.dataset._global_indices):
-                shard_idx, _ = self.dataset._locate(global_idx)
-                groups.setdefault(shard_idx, []).append(pos)
+    Default DataLoader shuffle=True picks a uniformly random global index
+    each step, which -- with 13+ shards of 1.5GB each and only one shard
+    cached in memory at a time (see ShardedSEN12MSDataset._load_shard) --
+    forces a full shard reload from disk on nearly every sample. That's
+    extremely slow.
 
-            g = torch.Generator().manual_seed(self.seed + self.epoch)
-            shard_order = torch.randperm(len(groups), generator=g).tolist()
+    This sampler instead: groups the dataset's indices by which shard they
+    belong to, shuffles the ORDER of shards each epoch, and shuffles
+    samples WITHIN each shard -- so consecutive batches mostly hit the
+    shard already cached in memory, while still giving a different (and
+    still random) sample order each epoch.
+    """
 
-            order = []
-            for shard_idx in shard_order:
-                positions = groups[shard_idx]
-                perm = torch.randperm(len(positions), generator=g).tolist()
-                order.extend(positions[i] for i in perm)
-            return iter(order)
+    def __init__(self, dataset: "ShardedSEN12MSDataset", seed: int = 42):
+        self.dataset = dataset
+        self.seed = seed
+        self.epoch = 0
 
-        def __len__(self):
-            return len(self.dataset)
+    def set_epoch(self, epoch: int):
+        self.epoch = epoch
+
+    def __iter__(self):
+        # Group this dataset's (already split-filtered) indices by shard.
+        groups: dict[int, list[int]] = {}
+        for pos, global_idx in enumerate(self.dataset._global_indices):
+            shard_idx, _ = self.dataset._locate(global_idx)
+            groups.setdefault(shard_idx, []).append(pos)
+
+        g = torch.Generator().manual_seed(self.seed + self.epoch)
+        shard_order = torch.randperm(len(groups), generator=g).tolist()
+
+        order = []
+        for shard_idx in shard_order:
+            positions = groups[shard_idx]
+            perm = torch.randperm(len(positions), generator=g).tolist()
+            order.extend(positions[i] for i in perm)
+        return iter(order)
+
+    def __len__(self):
+        return len(self.dataset)

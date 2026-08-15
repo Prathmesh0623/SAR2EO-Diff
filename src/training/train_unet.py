@@ -18,7 +18,7 @@ import yaml
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.dataset import SEN12MSPairedDataset
+from src.data.sharded_dataset import ShardedSEN12MSDataset
 from src.data.transforms import PairedAugment
 from src.models.unet import UNet
 from src.utils.seed import set_seed, log_environment
@@ -35,22 +35,19 @@ def main(config_path: str):
     print(f"Device: {device}")
     print("Environment:", log_environment())
 
-    train_ds = SEN12MSPairedDataset(
+    train_ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split="train",
-        patch_size=cfg["data"]["patch_size"],
-        sar_channels=tuple(cfg["data"]["sar_channels"]),
-        transform=PairedAugment(),
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
+        subset_size=200,   # smoke-test cap -- remove this line for a full run later
     )
-    val_ds = SEN12MSPairedDataset(
+    val_ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split="val",
-        patch_size=cfg["data"]["patch_size"],
-        sar_channels=tuple(cfg["data"]["sar_channels"]),
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
+        subset_size=200,   # smoke-test cap -- remove this line for a full run later
     )
 
     train_loader = DataLoader(train_ds, batch_size=cfg["training"]["batch_size"],

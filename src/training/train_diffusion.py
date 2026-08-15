@@ -23,7 +23,7 @@ import yaml
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.dataset import SEN12MSPairedDataset
+from src.data.sharded_dataset import ShardedSEN12MSDataset, ShardAwareSampler
 from src.data.transforms import PairedAugment
 from src.models.diffusion import ConditionalDiffusionUNet, GaussianDiffusion
 from src.models.segmentation import SimpleSegmentationNet, semantic_consistency_loss
@@ -41,15 +41,15 @@ def main(config_path: str):
     set_seed(cfg["seed"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_ds = SEN12MSPairedDataset(
+    train_ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split="train",
-        patch_size=cfg["data"]["patch_size"],
-        sar_channels=tuple(cfg["data"]["sar_channels"]),
-        transform=PairedAugment(), seed=cfg["data"]["seed"],
+        seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"], val_frac=cfg["data"]["val_split"],
+        subset_size=500,
     )
+    train_sampler = ShardAwareSampler(train_ds, seed=cfg["seed"])
     train_loader = DataLoader(train_ds, batch_size=cfg["training"]["batch_size"],
-                               shuffle=True, num_workers=cfg["training"]["num_workers"])
+                               sampler=train_sampler, num_workers=cfg["training"]["num_workers"])
 
     mp = cfg["model_params"]
     model = ConditionalDiffusionUNet(

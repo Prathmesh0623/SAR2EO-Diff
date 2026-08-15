@@ -1,20 +1,14 @@
 # SAR2EO-Diff
 
-### Conditional Diffusion for SAR-to-EO Satellite Image Translation with Semantic Consistency
+Translating Sentinel-1 SAR imagery into Sentinel-2-like optical imagery, using U-Net, Pix2Pix, and a from-scratch conditional diffusion model.
 
-![status](https://img.shields.io/badge/status-in--progress-yellow)
-![python](https://img.shields.io/badge/python-3.10%2B-blue)
-![pytorch](https://img.shields.io/badge/pytorch-2.x-red)
-![license](https://img.shields.io/badge/license-MIT-green)
+## Why
 
-> **Note on project status:** this repository is a complete, runnable
-> scaffold — every module has passing unit tests and shape-verified
-> forward passes — but it has **not yet been trained end-to-end on the
-> full SEN12MS dataset**. All quantitative results in this README and in
-> `docs/research_report.md` are placeholders until real Kaggle GPU
-> experiments are run and logged in `docs/experiments.md`. See "Project
-> Status" below.
+Radar (SAR) satellites can image the Earth through cloud cover and at night, but the output is hard to read — it looks nothing like a normal photo. Optical satellites give you something intuitive to look at, but they're blind whenever it's cloudy or dark, which is often exactly when you need the data most (flooding, wildfires, disaster response).
 
+This project asks a simple question: can a model learn to translate SAR into something that looks like optical imagery, while still being geographically accurate rather than just visually convincing? It's built around SEN12MS, a public dataset of paired Sentinel-1/Sentinel-2 patches.
+
+## What's here
 ## Overview
 
 SAR2EO-Diff investigates whether a deep generative model can translate a
@@ -219,10 +213,3 @@ and downstream-task evaluation. Full list in `docs/research_report.md` §19.
 - [ ] Final polished research report (`docs/research_report.md` still a
       template; `docs/results_today.md` has real interim findings)
 
-## References
-
-`[TODO — populate from docs/research_notes.md literature review]`
-
-## Author
-
-Prathmesh

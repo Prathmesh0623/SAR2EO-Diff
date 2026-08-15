@@ -10,7 +10,7 @@ import yaml
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.dataset import SEN12MSPairedDataset
+from src.data.sharded_dataset import ShardedSEN12MSDataset
 from src.evaluation.evaluate import evaluate_model
 
 
@@ -45,12 +45,11 @@ def main():
     state = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(state["model_state_dict"])
 
-    ds = SEN12MSPairedDataset(
+    ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split=args.split,
-        patch_size=cfg["data"]["patch_size"],
-        sar_channels=tuple(cfg["data"]["sar_channels"]),
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"], val_frac=cfg["data"]["val_split"],
+        subset_size=500,
     )
     loader = DataLoader(ds, batch_size=cfg["training"]["batch_size"], shuffle=False)
 

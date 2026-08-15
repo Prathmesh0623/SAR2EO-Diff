@@ -30,7 +30,7 @@ training:
   resume_from: null
 
 logging:
-  use_wandb: true
+  use_wandb: false
   project: "sar2eo-diff"
   run_name: "unet-baseline"
 

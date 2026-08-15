@@ -1,34 +1,24 @@
 """
-Training script for the conditional diffusion model (Stage 11), with an
-optional semantic-consistency term (Stage 12, enabled via config).
+Training script for the conditional diffusion model (Stage 11) -- FULL
+SCALE, resumable. Semantic consistency (Stage 12) supported via config
+but requires a pretrained segmentation checkpoint (not covered here).
 
     python -m src.training.train_diffusion --config configs/diffusion.yaml
 
-Each step:
-    1. Sample a random timestep t per example
-    2. Add noise to the real EO image according to t (forward diffusion)
-    3. Ask the network to predict the noise, conditioned on SAR + t
-    4. MSE(predicted_noise, actual_noise) is the base diffusion loss
-    5. (optional) periodically run full sampling on a few examples and add
-       the semantic-consistency loss between generated and real EO
-
-Note: full reverse sampling (p_sample_loop) is expensive (up to `timesteps`
-network calls per image), so the semantic loss is only evaluated every
-`semantic_eval_every` steps, not every step, to keep training tractable on
-a single Kaggle GPU.
+Resumable across multiple Kaggle sessions via training.resume_from.
 """
 from __future__ import annotations
 import argparse
+import os
 import yaml
 import torch
 from torch.utils.data import DataLoader
 
 from src.data.sharded_dataset import ShardedSEN12MSDataset, ShardAwareSampler
-from src.data.transforms import PairedAugment
 from src.models.diffusion import ConditionalDiffusionUNet, GaussianDiffusion
 from src.models.segmentation import SimpleSegmentationNet, semantic_consistency_loss
 from src.utils.seed import set_seed
-from src.utils.checkpoint import save_checkpoint
+from src.utils.checkpoint import save_checkpoint, load_checkpoint
 from src.utils.logger import ExperimentLogger
 
 SEMANTIC_EVAL_EVERY = 200  # steps
@@ -45,8 +35,8 @@ def main(config_path: str):
         root=cfg["data"]["dataset_root"], split="train",
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"], val_frac=cfg["data"]["val_split"],
-        subset_size=500,
     )
+    print(f"Train samples: {len(train_ds)}")
     train_sampler = ShardAwareSampler(train_ds, seed=cfg["seed"])
     train_loader = DataLoader(train_ds, batch_size=cfg["training"]["batch_size"],
                                sampler=train_sampler, num_workers=cfg["training"]["num_workers"])
@@ -74,10 +64,19 @@ def main(config_path: str):
     logger = ExperimentLogger(cfg["logging"]["use_wandb"], cfg["logging"]["project"],
                                cfg["logging"]["run_name"], cfg)
 
+    start_epoch = 0
+    resume_path = cfg["training"].get("resume_from")
+    if resume_path and os.path.exists(resume_path):
+        state = load_checkpoint(resume_path, model, optimizer, map_location=device)
+        start_epoch = state["epoch"] + 1
+        print(f"Resumed diffusion from epoch {start_epoch} (loaded {resume_path})")
+    elif resume_path:
+        print(f"No checkpoint found at {resume_path} -- starting fresh from epoch 0.")
+
     global_step = 0
     grad_accum = cfg["training"]["grad_accum_steps"]
 
-    for epoch in range(cfg["training"]["epochs"]):
+    for epoch in range(start_epoch, cfg["training"]["epochs"]):
         model.train()
         optimizer.zero_grad()
         for step, batch in enumerate(train_loader):
@@ -87,8 +86,6 @@ def main(config_path: str):
 
             loss = diffusion.training_loss(model, eo, sar, t)
 
-            # Optional semantic-consistency term — evaluated sparsely because
-            # it requires a full reverse-diffusion sampling pass.
             if seg_net is not None and global_step % SEMANTIC_EVAL_EVERY == 0:
                 with torch.no_grad():
                     generated = diffusion.p_sample_loop(model, sar, eo.shape, device)

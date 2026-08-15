@@ -1,25 +1,22 @@
 """
-Training script for the U-Net baseline (Stage 9).
+Training script for the U-Net baseline (Stage 9) -- FULL SCALE, resumable.
 
-Run from the project root (locally for a smoke test, or on Kaggle for a
-real run):
+Run from the project root:
 
     python -m src.training.train_unet --config configs/baseline_unet.yaml
 
-Follows the staged strategy from Stage 27 of the brief:
-    Phase 1: small subset_size, few epochs -> confirm the pipeline runs
-    Phase 2: overfit a tiny batch -> confirm the model CAN learn the mapping
-    Phase 3: larger subset, more epochs -> check generalization
-    Phase 4: full run -> final baseline number for comparison table
+Resumable across multiple Kaggle sessions: if configs/baseline_unet.yaml's
+training.resume_from path exists, training picks up from the last saved
+epoch instead of starting over. Checkpoints save every epoch.
 """
 from __future__ import annotations
 import argparse
+import os
 import yaml
 import torch
 from torch.utils.data import DataLoader
 
 from src.data.sharded_dataset import ShardedSEN12MSDataset, ShardAwareSampler
-from src.data.transforms import PairedAugment
 from src.models.unet import UNet
 from src.utils.seed import set_seed, log_environment
 from src.utils.checkpoint import save_checkpoint, load_checkpoint
@@ -40,15 +37,14 @@ def main(config_path: str):
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
-        subset_size=1000,
     )
     val_ds = ShardedSEN12MSDataset(
         root=cfg["data"]["dataset_root"], split="val",
         seed=cfg["data"]["seed"],
         train_frac=cfg["data"]["train_split"],
         val_frac=cfg["data"]["val_split"],
-        subset_size=1000,
     )
+    print(f"Train samples: {len(train_ds)}  Val samples: {len(val_ds)}")
 
     train_sampler = ShardAwareSampler(train_ds, seed=cfg["seed"])
     train_loader = DataLoader(train_ds, batch_size=cfg["training"]["batch_size"],
@@ -69,11 +65,14 @@ def main(config_path: str):
 
     start_epoch = 0
     best_val_loss = float("inf")
-    if cfg["training"]["resume_from"]:
-        state = load_checkpoint(cfg["training"]["resume_from"], model, optimizer, map_location=device)
+    resume_path = cfg["training"].get("resume_from")
+    if resume_path and os.path.exists(resume_path):
+        state = load_checkpoint(resume_path, model, optimizer, map_location=device)
         start_epoch = state["epoch"] + 1
         best_val_loss = state.get("best_metric", float("inf"))
-        print(f"Resumed from epoch {start_epoch}")
+        print(f"Resumed from epoch {start_epoch} (loaded {resume_path})")
+    elif resume_path:
+        print(f"No checkpoint found at {resume_path} -- starting fresh from epoch 0.")
 
     for epoch in range(start_epoch, cfg["training"]["epochs"]):
         model.train()

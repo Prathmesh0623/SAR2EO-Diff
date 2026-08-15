@@ -1,37 +1,37 @@
-# Config for the U-Net baseline (Stage 6)
-experiment_name: "unet_baseline_v1"
+# Config for the U-Net baseline (Stage 6) -- FULL SCALE RUN
+experiment_name: "unet_baseline_full"
 model: "unet"
 
 data:
   dataset_root: "/kaggle/input/datasets/krishnaanchal/sen12ms-asia/asian_sen12ms_shards"
-  patch_size: 256          # this dataset's patches are already 256x256, no cropping needed
+  patch_size: 256
   train_split: 0.7
   val_split: 0.15
   test_split: 0.15
   seed: 42
 
 model_params:
-  in_channels: 3            # this dataset's SAR has 3 channels, not VV/VH only
+  in_channels: 3
   out_channels: 3
   base_channels: 64
   depth: 4
 
 training:
-  batch_size: 4              # start conservative -- 256x256 uses more memory than 128 would
+  batch_size: 8
   learning_rate: 0.0001
   optimizer: "adam"
-  epochs: 5                    # smoke test only -- bump this up later for a real run
+  epochs: 30
   loss: "l1"
   mixed_precision: true
   grad_accum_steps: 1
   num_workers: 2
   checkpoint_dir: "checkpoints/unet"
   save_every_n_epochs: 1
-  resume_from: null
+  resume_from: "checkpoints/unet/last.pt"   # auto-resume if this file exists from a prior session
 
 logging:
   use_wandb: false
   project: "sar2eo-diff"
-  run_name: "unet-baseline"
+  run_name: "unet-full"
 
 seed: 42

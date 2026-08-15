@@ -1,11 +1,9 @@
-# Config for conditional diffusion model (Stage 8) + semantic consistency (Stage 9)
-experiment_name: "conditional_diffusion_v1"
+# Config for conditional diffusion model (Stage 8) -- FULL SCALE RUN
+experiment_name: "conditional_diffusion_full"
 model: "diffusion"
 
 data:
   dataset_root: "/kaggle/input/datasets/krishnaanchal/sen12ms-asia/asian_sen12ms_shards"
-  sar_channels: ["VV", "VH"]
-  eo_channels: ["R", "G", "B"]
   patch_size: 256
   train_split: 0.7
   val_split: 0.15
@@ -13,40 +11,40 @@ data:
   seed: 42
 
 model_params:
-  in_channels: 3          # noisy EO (3) concatenated with SAR conditioning
-  cond_channels: 3         # SAR VV+VH
+  in_channels: 3
+  cond_channels: 3
   out_channels: 3
-  base_channels: 32
-  channel_mults: [1, 2, 2]
-  num_res_blocks: 1
-  timesteps: 100
+  base_channels: 64
+  channel_mults: [1, 2, 2, 4]
+  num_res_blocks: 2
+  timesteps: 1000
   beta_schedule: "linear"
 
 semantic_consistency:
-  enabled: false           # set true after Stage 9 is implemented and validated
+  enabled: false
   segmentation_ckpt: null
   lambda_semantic: 0.1
 
 training:
-  batch_size: 2           # diffusion is memory-heavy; start small
+  batch_size: 4
   learning_rate: 0.0002
   optimizer: "adamw"
-  epochs: 3
+  epochs: 40
   mixed_precision: true
-  grad_accum_steps: 2
+  grad_accum_steps: 4
   num_workers: 2
   checkpoint_dir: "checkpoints/diffusion"
   save_every_n_epochs: 1
-  resume_from: null
+  resume_from: "checkpoints/diffusion/last.pt"   # auto-resume if this file exists from a prior session
   ema_decay: 0.995
 
 sampling:
-  num_inference_steps: 250  # DDIM-style reduced sampling for speed
+  num_inference_steps: 250
   guidance_scale: 1.0
 
 logging:
   use_wandb: false
   project: "sar2eo-diff"
-  run_name: "conditional-diffusion"
+  run_name: "conditional-diffusion-full"
 
 seed: 42

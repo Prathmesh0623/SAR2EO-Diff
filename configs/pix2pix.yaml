@@ -1,11 +1,9 @@
-# Config for Pix2Pix baseline (Stage 7)
-experiment_name: "pix2pix_baseline_v1"
+# Config for Pix2Pix baseline (Stage 7) -- FULL SCALE RUN
+experiment_name: "pix2pix_full"
 model: "pix2pix"
 
 data:
   dataset_root: "/kaggle/input/datasets/krishnaanchal/sen12ms-asia/asian_sen12ms_shards"
-  sar_channels: ["VV", "VH"]
-  eo_channels: ["R", "G", "B"]
   patch_size: 256
   train_split: 0.7
   val_split: 0.15
@@ -20,22 +18,22 @@ model_params:
   lambda_l1: 100.0
 
 training:
-  batch_size: 4
+  batch_size: 8
   learning_rate: 0.0002
   beta1: 0.5
   beta2: 0.999
   optimizer: "adam"
-  epochs: 5
+  epochs: 60
   mixed_precision: true
   grad_accum_steps: 1
   num_workers: 2
   checkpoint_dir: "checkpoints/pix2pix"
   save_every_n_epochs: 1
-  resume_from: null
+  resume_from: null   # Pix2Pix training script does not yet support resume -- see note below
 
 logging:
   use_wandb: false
   project: "sar2eo-diff"
-  run_name: "pix2pix-baseline"
+  run_name: "pix2pix-full"
 
 seed: 42

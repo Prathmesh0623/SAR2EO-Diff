@@ -87,9 +87,16 @@ class ShardedSEN12MSDataset(Dataset):
         self._shard_paths = []
         self._shard_lengths = []
         for p in shard_paths:
-            n = torch.load(p, map_location="cpu")["sar"].shape[0]
+            try:
+                n = torch.load(p, map_location="cpu")["sar"].shape[0]
+            except Exception as e:
+                print(f"[ShardedSEN12MSDataset] Skipping unreadable shard {p.name}: {e}")
+                continue
             self._shard_paths.append(p)
             self._shard_lengths.append(n)
+
+        if not self._shard_paths:
+            raise RuntimeError("No readable shards found -- all shard files failed to load.")
 
         total = sum(self._shard_lengths)
         all_indices = list(range(total))

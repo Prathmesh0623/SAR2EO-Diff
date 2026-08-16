@@ -15,17 +15,21 @@ import torch
 from src.data.preprocessing import denormalize_eo, denormalize_sar
 
 
-def _percentile_stretch(img: np.ndarray) -> np.ndarray:
-    """Percentile-stretch an image to [0,1] for display. Guards against
-    near-zero-variance input (e.g. an undertrained model outputting a
-    nearly flat/constant image) -- without this guard, dividing by a
-    near-zero (hi - lo) range collapses everything to black, which looks
-    like a broken/empty prediction even when the underlying values are
-    just uninteresting rather than invalid."""
-    lo, hi = np.percentile(img, [2, 98])
+def _percentile_stretch(img: np.ndarray, gamma: float = 0.6) -> np.ndarray:
+    """Percentile-stretch an image to [0,1] for display, then apply gamma
+    correction to brighten dim scenes (a genuinely dark real patch --
+    e.g. water, shadow, dense forest -- can look almost black even after
+    a linear stretch; gamma < 1 lifts midtones for visibility without
+    lying about the data). Guards against near-zero-variance input (e.g.
+    an undertrained model outputting a nearly flat/constant image) --
+    without this guard, dividing by a near-zero (hi - lo) range collapses
+    everything to black."""
+    lo, hi = np.percentile(img, [1, 99])
     if hi - lo < 1e-3:
-        return np.clip(img, 0, 1)
-    return np.clip((img - lo) / (hi - lo + 1e-8), 0, 1)
+        stretched = np.clip(img, 0, 1)
+    else:
+        stretched = np.clip((img - lo) / (hi - lo + 1e-8), 0, 1)
+    return np.power(stretched, gamma)
 
 
 def _sar_to_display(sar_channel: np.ndarray) -> np.ndarray:

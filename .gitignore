@@ -23,9 +23,8 @@ checkpoints/**/*.ckpt
 wandb/
 mlruns/
 
-# Results that are large binary outputs (keep small figures only if desired)
-results/qualitative/*.png
-results/qualitative/*.jpg
+# Large/generated result images are excluded by default; force-add
+# specific ones you want to keep (like final_comparison.png) with git add -f
 
 # OS / editor
 .DS_Store

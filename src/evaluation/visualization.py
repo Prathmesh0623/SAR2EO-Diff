@@ -35,8 +35,12 @@ def plot_sar_eo_comparison(sar: torch.Tensor, eo_real: torch.Tensor,
         model_outputs: dict of {model_name: (3, H, W) tensor} generated EO images
         save_path: if given, saves the figure instead of / in addition to showing it
     """
+    def _percentile_stretch(img):
+        lo, hi = np.percentile(img, [2, 98])
+        return np.clip((img - lo) / (hi - lo + 1e-8), 0, 1)
+
     sar_np = sar.detach().cpu().numpy()
-    eo_real_np = denormalize_eo(eo_real.detach().cpu().numpy())
+    eo_real_np = _percentile_stretch(denormalize_eo(eo_real.detach().cpu().numpy()))
 
     n_cols = 2 + len(model_outputs) + 1  # SAR + real EO + each model + error map (for best model)
     fig, axes = plt.subplots(1, n_cols, figsize=(4 * n_cols, 4))
@@ -51,7 +55,7 @@ def plot_sar_eo_comparison(sar: torch.Tensor, eo_real: torch.Tensor,
 
     last_pred = None
     for i, (name, pred) in enumerate(model_outputs.items()):
-        pred_np = denormalize_eo(pred.detach().cpu().numpy())
+        pred_np = _percentile_stretch(denormalize_eo(pred.detach().cpu().numpy()))
         axes[2 + i].imshow(np.transpose(pred_np, (1, 2, 0)))
         axes[2 + i].set_title(name)
         axes[2 + i].axis("off")

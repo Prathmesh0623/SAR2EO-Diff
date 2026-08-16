@@ -6,116 +6,60 @@ Translating Sentinel-1 SAR imagery into Sentinel-2-like optical imagery, using U
 
 Radar (SAR) satellites can image the Earth through cloud cover and at night, but the output is hard to read — it looks nothing like a normal photo. Optical satellites give you something intuitive to look at, but they're blind whenever it's cloudy or dark, which is often exactly when you need the data most (flooding, wildfires, disaster response).
 
-This project asks a simple question: can a model learn to translate SAR into something that looks like optical imagery, while still being geographically accurate rather than just visually convincing? It's built around SEN12MS, a public dataset of paired Sentinel-1/Sentinel-2 patches.
+This project asks a simple question: can a model learn to translate SAR into something that looks like optical imagery, while staying geographically accurate rather than just visually convincing? It's built around SEN12MS, a public dataset of paired Sentinel-1/Sentinel-2 patches.
 
 ## What's here
-## Overview
 
-SAR2EO-Diff investigates whether a deep generative model can translate a
-Sentinel-1 SAR satellite image into a corresponding optical/EO-like image
-while preserving meaningful geographic structure. The project compares
-four increasingly sophisticated approaches — U-Net regression, Pix2Pix
-(conditional GAN), a lightweight conditional diffusion model, and
-diffusion augmented with a segmentation-based semantic-consistency loss —
-under a shared, reproducible evaluation protocol.
+Three models, trained and evaluated on the same data:
 
-## Research Problem
+- **U-Net** — a plain encoder-decoder trained with L1 loss. The floor: what you get with pure pixel regression and no notion of "does this look real."
+- **Pix2Pix** — the same generator backbone, plus a PatchGAN discriminator and adversarial loss. Tests whether adversarial training buys you anything over plain regression.
+- **Conditional diffusion** — a lightweight DDPM conditioned on the SAR image, implemented from scratch (not a wrapped Stable Diffusion). Tests whether iterative denoising beats a single-shot GAN generator.
 
-Can a generative model produce EO-like imagery from SAR that is (a)
-visually/perceptually realistic **and** (b) semantically faithful (i.e.
-downstream land-cover interpretation of the generated image matches the
-real EO image)? These two properties don't automatically align — a model
-can look convincing while misrepresenting the underlying land cover, which
-is the central research question motivating the semantic-consistency
-component.
+A fourth piece — diffusion with a semantic-consistency loss, using a segmentation network to check that generated imagery preserves land-cover structure and not just visual plausibility — is implemented in code but not yet trained (see Status below).
 
-## Key Contributions (research-oriented, not novel-method claims)
+## Results so far
 
-- A from-scratch, from-first-principles lightweight conditional DDPM for
-  SAR-to-EO translation, sized to run on a single Kaggle GPU.
-- A controlled comparison against two standard baselines (U-Net, Pix2Pix)
-  under identical data/eval protocol.
-- An **experimental semantic-consistency enhancement**: a segmentation-based
-  auxiliary loss during diffusion training, evaluated for whether it
-  improves downstream semantic usefulness (not just pixel/perceptual
-  metrics).
-- Explicit ablations (polarization choice, model architecture, semantic
-  loss on/off) and a mandatory failure-analysis section — see
-  `docs/research_report.md`.
+Evaluated on held-out validation patches:
 
-## Architecture
+| Model | PSNR | SSIM | LPIPS |
+|---|---|---|---|
+| U-Net | 19.61 | 0.881 | 0.392 |
+| Pix2Pix | **25.62** | 0.878 | **0.289** |
+| Diffusion | not yet — undertrained, see notes below | | |
 
-```text
-             SAR (VV, VH)
-                  │
-                  ▼
-            SAR conditioning
-                  │
-                  ▼
-Noise ──►  Diffusion U-Net  ──►  Generated EO ──► Segmentation Net ──► Semantic loss
-                                       │
-                                       ▼
-                              Compared against real EO
-                          (PSNR / SSIM / LPIPS / FID / mIoU)
-```
+Pix2Pix beats the U-Net baseline on every metric except SSIM (essentially tied). What's more interesting is *how* it got there: the discriminator collapsed early in training — its loss dropped to near-zero within the first epoch while the generator's adversarial loss climbed for the rest of training, meaning the adversarial signal was mostly uninformative after that point. Despite this, the generator still outperformed the plain-L1 baseline on every image-quality metric. Worth digging into further; a controlled ablation (same generator, adversarial loss on vs. off) would help pin down why, but hasn't been run yet.
 
-Baselines (U-Net, Pix2Pix) follow the same SAR-in / EO-out contract so all
-four models are directly comparable. Full architecture details in
-`docs/methodology.md`.
+The diffusion model trains cleanly — loss drops steadily with no divergence — but hasn't had enough training time yet to generate valid-quality samples from pure noise. It does show real learned structure when tested in a partial-denoising setting (starting from a lightly-noised real image rather than pure noise), which confirms the model has learned something real about the SAR/EO relationship, just not enough yet for full from-scratch generation.
 
-## Dataset
+### Qualitative example
 
-[SEN12MS](https://mediatum.ub.tum.de/1474000) — paired Sentinel-1 SAR,
-Sentinel-2 EO, and MODIS land-cover patches. First implementation uses
-2-channel SAR input (VV + VH) and 3-channel RGB EO output; extending to
-the full 13-band Sentinel-2 output is listed as future work.
+![SAR to EO comparison](results/qualitative/final_comparison.png)
 
-## Methodology
+Left to right: input SAR, real EO (ground truth), U-Net output, Pix2Pix output, and the per-pixel error map for Pix2Pix. On this patch (agricultural fields with visible boundaries), U-Net's output is still nearly flat/undertrained, while Pix2Pix has clearly picked up on the real field structure and boundaries from the SAR input — the color palette is off (washed-out blue/pink rather than the real greens and browns) and fine detail is missing, but the spatial layout is recognizably correct. The error map confirms this: error concentrates along the same field boundaries visible in the real image rather than appearing as random noise, which suggests the model has learned real structure and just hasn't converged on color accuracy yet.
 
-See [`docs/methodology.md`](docs/methodology.md) for the full writeup of
-each model, the training strategy, and the evaluation protocol.
+Full write-up, including the complete failure analysis, is in [`docs/results_today.md`](docs/results_today.md).
 
-## Experiments
+## Problems hit along the way (and how they were solved)
 
-All experiments are config-driven (`configs/*.yaml`) and logged in
-[`docs/experiments.md`](docs/experiments.md). Training follows a staged
-strategy to avoid wasting limited Kaggle GPU hours: pipeline smoke test on
-a tiny subset → overfit-a-tiny-batch sanity check → larger-subset
-generalization check → final full run.
+This project went through more debugging than a typical "clean" pipeline, worth documenting honestly since it's part of the actual work:
 
-## Results
+- **The Kaggle dataset mirror doesn't match the standard SEN12MS layout.** The version used here (`sen12ms-asia`) ships as pre-cropped 256×256 PyTorch tensor shards (`shard_XXX.pt`), not the original GeoTIFF/ROI folder structure most SEN12MS code assumes. Required writing a custom `ShardedSEN12MSDataset` loader from scratch, including reverse-engineering the actual value ranges from the data itself (SAR and EO here don't follow standard physical unit ranges — normalization constants were derived empirically, not assumed).
+- **One of the 14 shards is corrupted/truncated** (a third of the expected file size) and fails to load. The loader now detects and skips unreadable shards automatically rather than crashing.
+- **Default random shuffling thrashes badly against sharded data.** Each shard is ~1.5GB; naive global shuffling forces a full shard reload on almost every sample. Fixed with a custom `ShardAwareSampler` that shuffles shard order and within-shard order separately, keeping I/O local.
+- **Pix2Pix discriminator collapse**, as described above — the fix applied is label smoothing on the discriminator's real-image target, a standard mitigation, though the deeper "why did Pix2Pix still win despite this" question is still open.
+- **A display bug made real, non-broken model outputs look like solid black images.** Linear min-max stretching plus the actual (narrow, low-reflectance) value range of some scenes was collapsing everything toward zero. Fixed with a percentile stretch plus gamma correction for dim scenes.
+- **Kaggle free-tier GPU time is a real constraint.** Full convergence for all three models is estimated at 20–30 GPU-hours; free-tier Kaggle gives about 30 hours/week with session limits well under that per sitting. Current results reflect a time-constrained pass sized to what was actually available, with training designed to checkpoint every epoch and resume automatically across sessions.
 
-> **Scope note:** these are results from an initial, time-constrained run
-> (small subsets, few epochs, free-tier Kaggle T4 GPU) intended to prove
-> the full pipeline works end-to-end on real data — not a final,
-> fully-trained result. Full details, failure analysis, and next steps
-> are in [`docs/results_today.md`](docs/results_today.md).
+## Status
 
-| Model | PSNR | SSIM | LPIPS | FID | mIoU |
-|-------|------|------|-------|-----|------|
-| U-Net | 19.608 | 0.881 | 0.392 | — | — |
-| Pix2Pix | **25.618** | 0.878 | **0.289** | — | — |
-| Conditional Diffusion | not evaluated (undertrained — see notes) | — | — | — | — |
-| Diffusion + Semantic Consistency | not run (future work) | — | — | — | — |
+Working and evaluated: data pipeline, U-Net, Pix2Pix.
+Working but undertrained: conditional diffusion (mechanism confirmed, needs more training for full generation quality).
+Implemented but not yet trained: semantic-consistency loss (needs a pretrained segmentation network first).
+Not yet done: full-scale training across all models, FID and mIoU metrics, a proper held-out test set, polarization ablation.
 
-Pix2Pix outperformed the U-Net baseline on PSNR and LPIPS despite a
-discriminator-collapse issue observed during its training — see
-`docs/results_today.md` for the full failure analysis.
+`docs/results_today.md` has the most current numbers and full failure analysis — this README will lag behind as training continues.
 
-## Ablation Study
-
-- **Polarization**: VV only vs. VH only vs. VV+VH
-- **Architecture**: U-Net vs. Pix2Pix vs. Diffusion vs. Diffusion+Semantic
-- **Semantic loss**: diffusion with vs. without the semantic-consistency term
-
-Full tables in `docs/experiments.md` and `docs/research_report.md` §15.
-
-## Failure Analysis
-
-A dedicated failure-analysis pass (blurry regions, incorrect colors,
-missing/false structures, vegetation/water confusion, urban reconstruction
-errors, SAR ambiguity) is required before the project is considered
-complete — see `docs/research_report.md` §16 and `notebooks/08_final_results.ipynb`.
 
 ## Project Structure
 
@@ -136,80 +80,45 @@ SAR2EO-Diff/
 └── docs/                    # methodology, experiment log, research notes, final report
 ```
 
-## Installation
+## Running it
+
+Locally, for setup and code changes:
 
 ```bash
-git clone <your-repo-url>
-cd SAR2EO-Diff
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+source venv/bin/activate      # venv\Scripts\activate on Windows
 pip install -r requirements.txt
+python -m pytest tests/ -v     # sanity check, no dataset needed
 ```
 
-Run the unit tests (no dataset required) to confirm the environment is set up correctly:
+Actual training runs on Kaggle (needs a GPU and the dataset attached):
 
-```bash
-pytest tests/ -v
+```python
+!git clone https://github.com/<your-username>/SAR2EO-Diff.git
+%cd SAR2EO-Diff
+!pip install -r requirements.txt
+!python -m src.training.train_unet --config configs/baseline_unet.yaml
 ```
 
-## Kaggle Setup
+Swap in `configs/pix2pix.yaml` or `configs/diffusion.yaml` for the other two. All three checkpoint every epoch and resume automatically if a checkpoint already exists, so a long training run can be split across multiple Kaggle sessions without losing progress.
 
-1. Create a Kaggle Notebook and attach the SEN12MS dataset as an input.
-2. Upload/clone this repository into `/kaggle/working/SAR2EO-Diff`.
-3. `!pip install -r requirements.txt`
-4. Update `data.dataset_root` in the relevant `configs/*.yaml` to match the
-   Kaggle input path (e.g. `/kaggle/input/sen12ms`).
-5. Run `scripts/prepare_data.py` first to confirm the dataset pipeline
-   discovers pairs correctly before launching any training.
+To evaluate a trained checkpoint:
 
-## Training
-
-```bash
-python scripts/train.py --config configs/baseline_unet.yaml
-python scripts/train.py --config configs/pix2pix.yaml
-python scripts/train.py --config configs/diffusion.yaml
-```
-
-## Evaluation
-
-```bash
-python scripts/evaluate.py --config configs/baseline_unet.yaml \
+```python
+!python -m scripts.evaluate --config configs/baseline_unet.yaml \
     --checkpoint checkpoints/unet/best.pt \
-    --output results/tables/unet_test_metrics.json
+    --output results/tables/unet_test_metrics.json --split val
 ```
 
-## Example Results
+## Dataset
 
-`[TODO — qualitative comparison grids, populated in
-notebooks/08_final_results.ipynb / results/qualitative/ once experiments
-are complete]`
+[SEN12MS](https://mediatum.ub.tum.de/1474000) — paired Sentinel-1 SAR and Sentinel-2 optical patches, plus MODIS land-cover labels. This project uses a Kaggle mirror (`sen12ms-asia`) packaged as pre-cropped tensor shards rather than the original GeoTIFF format — see `src/data/sharded_dataset.py` for the loader written specifically for this format. Currently using a 3-channel SAR input and 3-channel RGB EO output; the full 13-band Sentinel-2 output is on the future-work list.
 
 ## Limitations
 
-Single-GPU/Kaggle-scale training, patch-level (not full-scene) modeling,
-RGB-only EO output in the first implementation, and the inherent imperfect
-correspondence between SAR and optical imagery. Full discussion in
-`docs/research_report.md` §18.
+Single free-tier GPU, so everything is patch-level (256×256), not full-scene. Current results come from a reduced-scale pass built to prove the pipeline end-to-end and get an honest first read on relative model performance — not a fully-converged result. SAR-to-optical is also fundamentally an imperfect mapping: SAR and optical sensors measure physically different things, so no model will produce a pixel-perfect reconstruction, only a plausible and hopefully geographically faithful one.
 
-## Future Work
+## What's next
 
-Full multispectral Sentinel-2 output, latent diffusion for higher
-effective resolution, cross-attention conditioning, temporal SAR stacks,
-and downstream-task evaluation. Full list in `docs/research_report.md` §19.
-
-## Project Status
-
-- [x] Repository structure, configs, and all source modules created
-- [x] Unit tests passing for data preprocessing, all four model
-      architectures (shape/forward-pass), and evaluation metrics
-- [x] Dataset pipeline validated against real data (SEN12MS-Asia, Kaggle)
-- [x] U-Net baseline trained + formally evaluated (PSNR/SSIM/LPIPS)
-- [x] Pix2Pix baseline trained + formally evaluated (PSNR/SSIM/LPIPS)
-- [x] Conditional diffusion trained (undertrained; sampling not yet
-      producing valid-range output — see `docs/results_today.md`)
-- [ ] Semantic consistency experiment run (future work)
-- [ ] Full-scale training (more epochs, full ~26k-sample dataset)
-- [ ] FID and mIoU metrics, formal held-out test-set evaluation
-- [ ] Final polished research report (`docs/research_report.md` still a
-      template; `docs/results_today.md` has real interim findings)
+Full-scale training for all three models, semantic-consistency training once a segmentation network is pretrained, a proper held-out test set with FID and mIoU, and an ablation on SAR polarization/channel choice.
 

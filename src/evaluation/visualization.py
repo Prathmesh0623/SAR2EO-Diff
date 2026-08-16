@@ -15,14 +15,24 @@ import torch
 from src.data.preprocessing import denormalize_eo, denormalize_sar
 
 
+def _percentile_stretch(img: np.ndarray) -> np.ndarray:
+    """Percentile-stretch an image to [0,1] for display. Guards against
+    near-zero-variance input (e.g. an undertrained model outputting a
+    nearly flat/constant image) -- without this guard, dividing by a
+    near-zero (hi - lo) range collapses everything to black, which looks
+    like a broken/empty prediction even when the underlying values are
+    just uninteresting rather than invalid."""
+    lo, hi = np.percentile(img, [2, 98])
+    if hi - lo < 1e-3:
+        return np.clip(img, 0, 1)
+    return np.clip((img - lo) / (hi - lo + 1e-8), 0, 1)
+
+
 def _sar_to_display(sar_channel: np.ndarray) -> np.ndarray:
     """Take one normalized SAR channel (e.g. VV) and rescale to [0,1] for
     grayscale display."""
     db = denormalize_sar(sar_channel)
-    # simple percentile stretch for visibility
-    lo, hi = np.percentile(db, [2, 98])
-    stretched = np.clip((db - lo) / (hi - lo + 1e-8), 0, 1)
-    return stretched
+    return _percentile_stretch(db)
 
 
 def plot_sar_eo_comparison(sar: torch.Tensor, eo_real: torch.Tensor,
@@ -35,10 +45,6 @@ def plot_sar_eo_comparison(sar: torch.Tensor, eo_real: torch.Tensor,
         model_outputs: dict of {model_name: (3, H, W) tensor} generated EO images
         save_path: if given, saves the figure instead of / in addition to showing it
     """
-    def _percentile_stretch(img):
-        lo, hi = np.percentile(img, [2, 98])
-        return np.clip((img - lo) / (hi - lo + 1e-8), 0, 1)
-
     sar_np = sar.detach().cpu().numpy()
     eo_real_np = _percentile_stretch(denormalize_eo(eo_real.detach().cpu().numpy()))
 
